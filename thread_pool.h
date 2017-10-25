@@ -32,6 +32,9 @@ void ThreadPoolStart(ThreadPool* self);
 // Shut the pool down and stop accepting new tasks.
 void ThreadPoolShutdown(ThreadPool* self);
 
+// Reset the pool after it has been joined to reuse it.
+void ThreadPoolReset(ThreadPool *self);
+
 // Create a task for the pool.
 void ThreadPoolCreateTask(ThreadTask* task, void* data, void (*func)(void*));
 

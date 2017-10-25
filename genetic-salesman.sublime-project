@@ -1,0 +1,25 @@
+{
+	"folders":
+	[
+		{
+			"path": ".",
+			"folder_exclude_patterns":
+			[
+				".dSYM"
+			],
+			"file_exclude_patterns":
+			[
+				"*.sublime-project",
+				"*.o",
+				"main"
+			]
+		}
+	],
+	"build_systems":
+	[
+		{
+			"name": "run",
+			"shell_cmd": "./main 2 12 25 --generate 5"
+		}
+	]
+}

@@ -75,6 +75,15 @@ void ThreadPoolStart(ThreadPool* self) {
   }
 }
 
+void ThreadPoolReset(ThreadPool* self) {
+  assert(atomic_load(&(self->shutdown_)));
+  assert(atomic_load(&(self->done_)));
+  assert(QueueEmpty(&(self->queue_)));
+  assert(!self->task_count_);
+  atomic_store(&(self->shutdown_), 0);
+  atomic_store(&(self->done_), 0);
+}
+
 void ThreadPoolShutdown(ThreadPool* self) {
   atomic_store(&(self->shutdown_), 1);
   pthread_cond_signal(&(self->queue_condvar_));
