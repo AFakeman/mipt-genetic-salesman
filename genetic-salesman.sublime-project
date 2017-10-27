@@ -19,7 +19,7 @@
 	[
 		{
 			"name": "run",
-			"shell_cmd": "./main 2 12 25 --generate 5"
+			"shell_cmd": "make && ./main 2 12 25 --generate 5"
 		}
 	]
 }

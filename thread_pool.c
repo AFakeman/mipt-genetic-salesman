@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 ThreadTask* PopTask(ThreadPool* self) {
@@ -22,6 +23,7 @@ ThreadTask* PopTask(ThreadPool* self) {
 }
 
 void PushTask(ThreadPool* self, ThreadTask* data) {
+  //printf("Task added\n");
   pthread_mutex_lock(&(self->queue_mutex_));
   QueuePush(&(self->queue_), data);
   ++self->task_count_;

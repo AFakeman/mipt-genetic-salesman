@@ -1,19 +1,31 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <string.h>
+#include <time.h>
 
-#include "random_provider.h"
+#include "salesman.h"
 
-int main() {
-	RandomProvider* provider = RandomProviderCreate();
-	sleep(1);
+const char* kGenerateFlag = "--generate";
+const char* kFileFlag = "--file";
+const size_t kGraphWeightMax = 16;
 
-	for(size_t i = 0; i < 10000; ++i) {
-		unsigned* ptr = RandomProviderPopRandom(provider);
-		printf("%p\n", ptr);
-		free(ptr);
+int main(int argc, char *argv[]) {
+	graph_t *graph;
+	size_t t;
+	size_t N;
+	size_t S;
+	assert(argc == 6);
+	assert(sscanf(argv[1], "%lu", &t));
+	assert(sscanf(argv[2], "%lu", &N));
+	assert(sscanf(argv[3], "%lu", &S));
+	srand(time(NULL));
+	if (!strcmp(argv[4], kFileFlag)) {
+		graph = graph_read_file(argv[5]);
+	} else {
+		assert(!strcmp(argv[4], kGenerateFlag));
+		graph = graph_generate(atoi(argv[5]), kGraphWeightMax);
 	}
-
-	RandomProviderShutdown(provider);
-	RandomProviderDelete(provider);
+	ShortestPath(graph, t, N, S);
+	graph_destroy(graph);
 }

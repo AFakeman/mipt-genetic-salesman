@@ -24,7 +24,7 @@ void RandomChunkDelete(RandomChunk* self) {
 	free(self);
 }
 
-unsigned RandomChunkRandomPop(RandomChunk *self) {
+unsigned RandomChunkPopRandom(RandomChunk *self) {
 	unsigned to_ret = self->chunk[self->cursor];
 	if (++(self->cursor) == self->length) {
 		free(self->chunk);

@@ -1,5 +1,8 @@
 #include <stdio.h>
 
+#ifndef GRAPH_H
+#define GRAPH_H
+
 typedef struct graph_t {
 	int n;
 	int *weights;
@@ -29,3 +32,5 @@ graph_t *graph_read_file(const char *filename);
 
 void graph_dump(const graph_t *g, FILE *f);
 void graph_dump_file(const graph_t *g, const char *filename);
+
+#endif
