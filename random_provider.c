@@ -33,18 +33,16 @@ void* GenerateRandomChunk(size_t size) {
 void* RandomProviderThreadJob(void* in) {
   RandomProvider* self = (RandomProvider*)in;
   pthread_mutex_lock(&(self->mutex_));
-  //printf("START\n");
+  // printf("START\n");
   while (!atomic_load(&(self->shutdown_))) {
     while (self->queue_size_ < kRandomQueueSize) {
       QueuePush(&(self->queue_), GenerateRandomChunk(kRandomQueueChunkSize));
-      //printf("PUSH\n");
       ++self->queue_size_;
       pthread_mutex_unlock(&(self->mutex_));
       pthread_cond_signal(&(self->cond_consumer_));
       // Let the other threads grab a fresh chunk.
       pthread_mutex_lock(&(self->mutex_));
     }
-    //printf("QUEUE FILLED\n");
     pthread_cond_wait(&(self->cond_producer_), &(self->mutex_));
   }
   return NULL;
@@ -64,10 +62,12 @@ RandomProvider* RandomProviderCreate() {
 
 void RandomProviderDelete(RandomProvider* self) {
   void* queue_el;
+  RandomProviderShutdown(self);
+  pthread_cond_signal(&(self->cond_producer_));
+  pthread_join(self->thread_, NULL);
   pthread_mutex_destroy(&(self->mutex_));
   pthread_cond_destroy(&(self->cond_producer_));
   pthread_cond_destroy(&(self->cond_consumer_));
-  pthread_join(self->thread_, NULL);
   while ((queue_el = QueuePop(&(self->queue_)))) {
     free(queue_el);
   }
@@ -87,7 +87,6 @@ unsigned* RandomProviderPopRandom(RandomProvider* self) {
     pthread_cond_signal(&(self->cond_consumer_));
   }
   if (self->queue_size_ < kRandomQueueSize / 2) {
-    //printf("REFILL NEEDED\n");
     pthread_cond_signal(&(self->cond_producer_));
   }
   pthread_mutex_unlock(&(self->mutex_));

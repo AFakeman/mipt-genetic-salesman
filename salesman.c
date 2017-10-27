@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <sys/time.h>
+
 #include "graph.h"
 #include "random_chunk.h"
 #include "random_provider.h"
@@ -54,14 +56,14 @@ int Fitness(const Path* path, const graph_t* graph) {
   int first = 0;
   int second = 1;
   for (; second < path->length; ++first, ++second) {
-    result += graph_weight(graph, first, second);
+    result += graph_weight(graph, path->path[first], path->path[second]);
   }
-  result += graph_weight(graph, 0, path->length - 1);
+  result += graph_weight(graph, 0, path->path[path->length - 1]);
   return result;
 }
 
 int VerifyPermutation(const Path* path) {
-  int *used = calloc(path->length, sizeof(int));
+  int* used = calloc(path->length, sizeof(int));
   size_t i;
   for (i = 0; i < path->length; ++i) {
     used[path->path[i]] = 1;
@@ -108,45 +110,23 @@ void MutateTask(void* in) {
 }
 
 void Crossover(const Path* left, const Path* right, Path* result) {
-  int* used = calloc(left->length, sizeof(size_t));
+  int* used = calloc(left->length, sizeof(int));
   size_t result_cursor;
   size_t right_cursor;
   result->length = left->length;
   assert(right->length == left->length);
-  assert(VerifyPermutation(left));
-  assert(VerifyPermutation(right));
   for (result_cursor = 0; result_cursor < result->length / 2; ++result_cursor) {
     result->path[result_cursor] = left->path[result_cursor];
     used[left->path[result_cursor]] = 1;
   }
-  assert(VerifyPermutation(right));
   for (right_cursor = 0; right_cursor < right->length; ++right_cursor) {
     if (!used[right->path[right_cursor]]) {
-      assert(VerifyPermutation(right));
       result->path[result_cursor] = right->path[right_cursor];
       used[right->path[right_cursor]] = 1;
       ++result_cursor;
-      assert(VerifyPermutation(right));
     }
-    assert(VerifyPermutation(right));
   }
-  assert(VerifyPermutation(right));
-  if (result_cursor != result->length) {
-    for (int i = 0; i < left->length; i++) {
-      printf("%d ", used[i]);
-    }
-    printf("\n");
-    for (int i = 0; i < left->length; i++) {
-      printf("%d ", right->path[i]);
-    }
-    printf("\n");
-    for (int i = 0; i < left->length; i++) {
-      printf("%d ", left->path[i]);
-    }
-    printf("\n");
-    printf("ASSERT FAILED, %lu != %lu\n", result_cursor, result->length);
-    assert(result_cursor == result->length);
-  }
+  assert(VerifyPermutation(result));
   free(used);
 }
 
@@ -154,7 +134,6 @@ void CrossoverTask(void* in) {
   CrossoverJob* task = (CrossoverJob*)in;
   size_t cursor;
   RandomChunk* chunk = RandomChunkCreate(task->provider);
-  printf("%p, %p\n", task->paths, task->paths + task->paths_count);
   for (cursor = 0; cursor < task->output_count; ++cursor) {
     size_t rand1 = RandomChunkPopRandomLong(chunk) % task->paths_count;
     size_t rand2 = RandomChunkPopRandomLong(chunk) % task->paths_count;
@@ -164,17 +143,48 @@ void CrossoverTask(void* in) {
   free(task);
 }
 
-int* ShortestPath(const graph_t* graph,
+// Swap |size| bytes at |a| and |b| (not overlapping);
+void memswap(void* a, void* b, size_t size) {
+  char* a_cast = (char*)a;
+  char* b_cast = (char*)b;
+  size_t i;
+  for (i = 0; i < size; i++) {
+    char tmp = a_cast[i];
+    a_cast[i] = b_cast[i];
+    b_cast[i] = tmp;
+  }
+}
+
+void DumpPaths(const Path* arr, size_t count) {
+  size_t path;
+  for (path = 0; path < count; path++) {
+    size_t coord;
+    for (coord = 0; coord < arr[path].length; ++coord)
+      printf("%d ", arr[path].path[coord]);
+    printf("%d\n", arr[path].fitness);
+  }
+}
+
+double timediff(struct timeval* a, struct timeval* b) {
+  return ((a->tv_sec - b->tv_sec) * 1e6 + (a->tv_usec - b->tv_usec)) / 1.0e6;
+}
+
+int ShortestPath(const graph_t* graph,
                   size_t thread_count,
                   size_t population_size,
-                  size_t same_fitness_for) {
+                  size_t same_fitness_for,
+                  ShortestPathData *return_data) {
   ThreadPool thread_pool;
-  int* best = (int*) malloc(graph->n * sizeof(int));
   int best_fitness = INT_MAX;
+  size_t current_same_best = 0;
+  size_t iterations = 0;
   size_t children_size = population_size * kReproductionFactor;
   Path* population = malloc(population_size * sizeof(Path));
   Path* children = malloc(children_size * sizeof(Path));
   RandomProvider* provider = RandomProviderCreate();
+  struct timeval begin;
+  struct timeval end;
+  gettimeofday(&begin, NULL);
   ThreadPoolInit(&thread_pool, thread_count);
   {
     size_t i;
@@ -190,8 +200,7 @@ int* ShortestPath(const graph_t* graph,
       children[i].path = (int*)malloc(sizeof(int) * graph->n);
     }
   }
-  while (1) {
-    printf("New iteration\n");
+  while (current_same_best < same_fitness_for) {
     // Crossover
     {
       size_t child_offset = 0;
@@ -210,7 +219,6 @@ int* ShortestPath(const graph_t* graph,
         job_task->paths_count = population_size;
         job_task->output = children + child_offset;
         job_task->output_count = chunk_size;
-        assert(job_task->output + job_task->output_count <= children + children_size);
         child_offset += chunk_size;
         ThreadPoolCreateTask(pool_task, job_task, CrossoverTask);
         ThreadPoolAddTask(&thread_pool, pool_task);
@@ -220,26 +228,25 @@ int* ShortestPath(const graph_t* graph,
       ThreadPoolStart(&thread_pool);
       ThreadPoolJoin(&thread_pool);
     }
-    printf("Passed the crossover stage\n");
     ThreadPoolReset(&thread_pool);
     // Mutation
     {
-      size_t offset = 0;
+      size_t child_offset = 0;
 
-      while (offset < population_size) {
+      while (child_offset < children_size) {
         size_t chunk_size;
-        if (population_size - offset < kPathsPerMutationTask) {
-          chunk_size = population_size - offset;
+        if (children_size - child_offset < kPathsPerMutationTask) {
+          chunk_size = children_size - child_offset;
         } else {
           chunk_size = kPathsPerMutationTask;
         }
-        MutateJob* job_task = (MutateJob*)malloc(sizeof(CrossoverJob));
+        MutateJob* job_task = (MutateJob*)malloc(sizeof(MutateJob));
         ThreadTask* pool_task = (ThreadTask*)malloc(sizeof(ThreadTask));
         job_task->provider = provider;
-        job_task->paths = population;
-        job_task->paths_count = population_size;
+        job_task->paths = children + child_offset;
+        job_task->paths_count = chunk_size;
         job_task->graph = graph;
-        offset += chunk_size;
+        child_offset += chunk_size;
         ThreadPoolCreateTask(pool_task, job_task, MutateTask);
         ThreadPoolAddTask(&thread_pool, pool_task);
       }
@@ -248,18 +255,24 @@ int* ShortestPath(const graph_t* graph,
       ThreadPoolStart(&thread_pool);
       ThreadPoolJoin(&thread_pool);
     }
-    printf("Passed the mutation stage\n");
     ThreadPoolReset(&thread_pool);
     // Selection
     {
       qsort(children, children_size, sizeof(Path), PathCompare);
-      printf("%d\n", children[0].fitness);
+      assert(children[0].fitness == Fitness(children, graph));
+      printf("Best one this iteration: %d\n", children[0].fitness);
       if (children[0].fitness < best_fitness) {
-        memcpy(best, children[0].path, sizeof(int) * graph->n);
+        if (return_data) {
+          memcpy(return_data->best_path, children[0].path, sizeof(int) * graph->n);
+        }
         best_fitness = children[0].fitness;
+        current_same_best = 0;
+      } else {
+        ++current_same_best;
       }
-      memcpy(population, children, population_size);
+      memswap(population, children, population_size * sizeof(Path));
     }
+    ++iterations;
   }
   RandomProviderDelete(provider);
   ThreadPoolDestroy(&thread_pool);
@@ -274,5 +287,10 @@ int* ShortestPath(const graph_t* graph,
   }
   free(population);
   free(children);
-  return best;
+  gettimeofday(&end, NULL);
+  if (return_data) {
+    return_data->iterations = iterations;
+    return_data->time = timediff(&end, &begin);
+  }
+  return best_fitness;
 }
