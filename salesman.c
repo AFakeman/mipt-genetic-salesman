@@ -258,9 +258,17 @@ int ShortestPath(const graph_t* graph,
     ThreadPoolReset(&thread_pool);
     // Selection
     {
+      size_t i;
+      double average_fitness = 0;
       qsort(children, children_size, sizeof(Path), PathCompare);
       assert(children[0].fitness == Fitness(children, graph));
-      printf("Best one this iteration: %d\n", children[0].fitness);
+      for (i = 0; i < children_size; ++i) {
+        average_fitness += children[i].fitness;
+      }
+      average_fitness /= children_size;
+      printf("Iteration %lu best: %d worst: %d average: %lf\n", iterations,
+             children[0].fitness, children[children_size - 1].fitness,
+             average_fitness);
       if (children[0].fitness < best_fitness) {
         if (return_data) {
           memcpy(return_data->best_path, children[0].path, sizeof(int) * graph->n);
