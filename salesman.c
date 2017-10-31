@@ -80,6 +80,8 @@ int VerifyPermutation(const Path* path) {
   return 1;
 }
 
+// Mutate algorithm: randomly swap vertices
+// in the path.
 void Mutate(Path* path, RandomChunk* chunk) {
   assert(VerifyPermutation(path));
   size_t i;
@@ -109,6 +111,9 @@ void MutateTask(void* in) {
   free(task);
 }
 
+// Crossover algorithm: first half of the path is taken from the
+// |left| parent, the rest of the vertices appear in the same order
+// as in the |right| parent.
 void Crossover(const Path* left, const Path* right, Path* result) {
   int* used = calloc(left->length, sizeof(int));
   size_t result_cursor;
@@ -256,7 +261,7 @@ int ShortestPath(const graph_t* graph,
       ThreadPoolJoin(&thread_pool);
     }
     ThreadPoolReset(&thread_pool);
-    // Selection
+    // Selection: take the top 25% of the children.
     {
       size_t i;
       double average_fitness = 0;
